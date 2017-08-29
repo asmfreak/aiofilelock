@@ -24,7 +24,7 @@ setup(
     author_email='cpp.create@gmail.com',
     url='https://github.com/ASMfreaK/aiofilelock',
     license='GPLv3',
-    description='tools and library for Habitica restful API (http://habitica.com)',
+    description='mutable and immutable file lock for asyncio',
     packages=['aiofilelock'],
     classifiers=[
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
