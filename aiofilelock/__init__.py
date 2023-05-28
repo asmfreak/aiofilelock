@@ -17,7 +17,8 @@
 """
 import asyncio
 from fcntl import lockf, flock, LOCK_EX, LOCK_SH, LOCK_NB, LOCK_UN
-from typing import IO
+from typing import IO, Union
+import time
 
 
 class AIOMutableFileLock(object):
@@ -28,6 +29,8 @@ class AIOMutableFileLock(object):
     # Arguments
 
     file_ob : file object to lock
+    timeout : time in seconds after which the `BlockingIOError` will be raised, default to None (infinite)
+    granularity : time in seconds between trials of flock command, default = 1.0
 
     # Example:
     It can be used both as an async context manager:
@@ -56,8 +59,10 @@ class AIOMutableFileLock(object):
     loop.run_until_complete(main())
     ```
     """
-    def __init__(self, file_ob: IO) -> None:
+    def __init__(self, file_ob: IO, timeout: Union[float, None]=None, granularity: float=1.0) -> None:
         self._file = file_ob
+        self._timeout = timeout
+        self._granularity = granularity
 
     def _acquire_lock(self):
         flock(self._file, LOCK_EX | LOCK_NB)
@@ -67,12 +72,18 @@ class AIOMutableFileLock(object):
 
     async def acquire(self):
         'grab the lock'
+        if self._timeout is not None:
+            deadline = time.time() + self._timeout
+        else:
+            deadline = None
         while True:
             try:
                 self._acquire_lock()
                 return
             except BlockingIOError:
-                await asyncio.sleep(1.0)
+                if deadline is not None and deadline < time.time():
+                    raise
+                await asyncio.sleep(self._granularity)
 
     async def __aenter__(self):
         await self.acquire()
@@ -99,6 +110,8 @@ class AIOImmutableFileLock(AIOMutableFileLock):
     # Arguments
 
     file_ob : file object to lock
+    timeout : time in seconds after which the `BlockingIOError` will be raised, default to None (wait forever)
+    granularity : time in seconds between trials of flock command, default = 1.0
 
     # Example:
     It can be used both as an async context manager:
@@ -127,10 +140,10 @@ class AIOImmutableFileLock(AIOMutableFileLock):
     loop.run_until_complete(main())
     ```
     """
-    def __init__(self, file_ob: IO) -> None:
+    def __init__(self, file_ob: IO, timeout: Union[float, None]=None, granularity: float=1.0) -> None:
         if file_ob.mode != 'r':
             raise BadFileError('Cannot immutably lock a not readonly file')
-        super().__init__(file_ob)
+        super().__init__(file_ob, timeout, granularity)
 
     def _acquire_lock(self):
         flock(self._file, LOCK_SH | LOCK_NB)
